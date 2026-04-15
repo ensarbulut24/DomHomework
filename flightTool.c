@@ -6,28 +6,20 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <libxml/xmlschemastypes.h>
-struct FlightData {
-    char id[20];
-    char time[50];
-    float weight;
-    int points;
-    char stat[50];
-    char dest[100];
-    char cabin[30];
-    int seat;
-    char version[30];
-    char name[200];
-};
-void show_help() {
-    printf("Please use like this:\n");
-    printf("./flightTool <input_file> <output_file> <conversion_type> -separator <1|2|3> -opsys <1|2|3> [-encoding <1|2|3>] [-h]\n");
-}
+#include "flightTool.h"
+
 int flag_separator = 0;
 int flag_opsys = 0;
 int flag_encoding = 0;
 char* file_in;
 char* file_out;
 int conv_type;
+
+void show_help() {
+    printf("Please use like this:\n");
+    printf("./flightTool <input_file> <output_file> <conversion_type> -separator <1|2|3> -opsys <1|2|3> [-encoding <1|2|3>] [-h]\n");
+}
+
 void do_csv_to_binary() {
     FILE *fp1 = fopen(file_in, "r");
     if (fp1 == NULL) {
@@ -37,6 +29,7 @@ void do_csv_to_binary() {
     FILE *fp2 = fopen(file_out, "wb");
     if (fp2 == NULL) {
         printf("Error opening output file\n");
+        fclose(fp1);
         return;
     }
     char line[2000];
@@ -52,12 +45,8 @@ void do_csv_to_binary() {
         strcpy(my_sep, ",");
     }
     while (fgets(line, 2000, fp1) != NULL) {
-        if (line[strlen(line) - 1] == '\n') {
-            line[strlen(line) - 1] = '\0';
-        }
-        if (line[strlen(line) - 1] == '\r') {
-            line[strlen(line) - 1] = '\0';
-        }
+        if (line[strlen(line) - 1] == '\n') line[strlen(line) - 1] = '\0';
+        if (line[strlen(line) - 1] == '\r') line[strlen(line) - 1] = '\0';
         if (strlen(line) == 0) continue;
         char *token;
         char *ptr = line;
@@ -65,9 +54,7 @@ void do_csv_to_binary() {
         int count = 0;
         while (count < 10) {
             token = strsep(&ptr, my_sep);
-            if (token == NULL) {
-                break;
-            }
+            if (token == NULL) break;
             strcpy(tokens[count], token);
             count++;
         }
@@ -75,18 +62,12 @@ void do_csv_to_binary() {
         memset(&temprec, 0, sizeof(struct FlightData));
         strcpy(temprec.id, tokens[0]);
         strcpy(temprec.time, tokens[1]);
-        if (strlen(tokens[2]) > 0) {
-            temprec.weight = atof(tokens[2]);
-        }
-        if (strlen(tokens[3]) > 0) {
-            temprec.points = atoi(tokens[3]);
-        }
+        if (strlen(tokens[2]) > 0) temprec.weight = atof(tokens[2]);
+        if (strlen(tokens[3]) > 0) temprec.points = atoi(tokens[3]);
         strcpy(temprec.stat, tokens[4]);
         strcpy(temprec.dest, tokens[5]);
         strcpy(temprec.cabin, tokens[6]);
-        if (strlen(tokens[7]) > 0) {
-            temprec.seat = atoi(tokens[7]);
-        }
+        if (strlen(tokens[7]) > 0) temprec.seat = atoi(tokens[7]);
         strcpy(temprec.version, tokens[8]);
         strcpy(temprec.name, tokens[9]);
         fwrite(&temprec, sizeof(struct FlightData), 1, fp2);
@@ -94,6 +75,7 @@ void do_csv_to_binary() {
     fclose(fp1);
     fclose(fp2);
 }
+
 void calculate_hex(char* text, int enc_type, char* output) {
     if (enc_type == 3 || enc_type == 0) {
         if (strlen(text) == 0) {
@@ -134,6 +116,7 @@ void calculate_hex(char* text, int enc_type, char* output) {
         }
     }
 }
+
 void do_binary_to_xml() {
     FILE *bin_file = fopen(file_in, "rb");
     if (bin_file == NULL) {
@@ -190,10 +173,10 @@ void do_binary_to_xml() {
     xmlSaveFormatFileEnc(file_out, mydoc, "UTF-8", 1);
     xmlFreeDoc(mydoc);
 }
+
 void do_validate() {
     xmlLineNumbersDefault(1);
-    xmlSchemaParserCtxtPtr schema_ctxt;
-    schema_ctxt = xmlSchemaNewParserCtxt(file_out);
+    xmlSchemaParserCtxtPtr schema_ctxt = xmlSchemaNewParserCtxt(file_out);
     if (schema_ctxt == NULL) {
         printf("Schema context failed\n");
         return;
@@ -204,8 +187,7 @@ void do_validate() {
     if (xml_file == NULL) {
         printf("Could not parse %s\n", file_in);
     } else {
-        xmlSchemaValidCtxtPtr valid_ctxt;
-        valid_ctxt = xmlSchemaNewValidCtxt(schema);
+        xmlSchemaValidCtxtPtr valid_ctxt = xmlSchemaNewValidCtxt(schema);
         int result = xmlSchemaValidateDoc(valid_ctxt, xml_file);
         if (result == 0) {
             printf("%s validates\n", file_in);
@@ -221,6 +203,7 @@ void do_validate() {
         xmlSchemaFree(schema);
     }
 }
+
 void update_encoding_tree(xmlNodePtr n, int my_enc) {
     xmlNodePtr current = NULL;
     for (current = n; current != NULL; current = current->next) {
@@ -243,6 +226,7 @@ void update_encoding_tree(xmlNodePtr n, int my_enc) {
         update_encoding_tree(current->children, my_enc);
     }
 }
+
 void do_encoding_change() {
     xmlDocPtr my_doc = xmlReadFile(file_in, NULL, 0);
     if (my_doc == NULL) {
@@ -280,6 +264,7 @@ void do_encoding_change() {
     }
     xmlFreeDoc(my_doc);
 }
+
 int main(int argc, char **argv) {
     if (argc > 1) {
         for (int i = 1; i < argc; i++) {
@@ -297,13 +282,13 @@ int main(int argc, char **argv) {
     file_out = argv[2];
     conv_type = atoi(argv[3]);
     for (int i = 4; i < argc; i++) {
-        if (strcmp(argv[i], "-separator") == 0) {
+        if (strcmp(argv[i], "-separator") == 0 && i + 1 < argc) {
             flag_separator = atoi(argv[i+1]);
         }
-        if (strcmp(argv[i], "-opsys") == 0) {
+        if (strcmp(argv[i], "-opsys") == 0 && i + 1 < argc) {
             flag_opsys = atoi(argv[i+1]);
         }
-        if (strcmp(argv[i], "-encoding") == 0) {
+        if (strcmp(argv[i], "-encoding") == 0 && i + 1 < argc) {
             flag_encoding = atoi(argv[i+1]);
         }
     }
